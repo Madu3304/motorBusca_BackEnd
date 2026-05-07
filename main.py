@@ -92,16 +92,35 @@ async def search(
         span.set_attribute("execution_time_ms", tempo_execucao)
 
     elif algorithm == "kmp":
-
         return {
-            "mensagem": "KMP ainda não implementado"
-        }
+            "found": False,
+            "message": "KMP ainda não implementado",
+
+            "occurrences": 0,
+            "positions": [],
+            "execution_time_ms": 0,
+
+            "text_size_n": n,
+            "pattern_size_m": m,
+
+            "matches": []
+    }
 
     elif algorithm == "boyer":
 
         return {
-            "mensagem": "Boyer Moore ainda não implementado"
-        }
+            "found": False,
+            "message": "Boyer Moore ainda não implementado",
+
+            "occurrences": 0,
+            "positions": [],
+            "execution_time_ms": 0,
+
+            "text_size_n": n,
+            "pattern_size_m": m,
+
+            "matches": []
+    }
 
 
     if len(resultado) > 0:
