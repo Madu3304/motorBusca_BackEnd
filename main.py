@@ -1,8 +1,19 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import PyPDF2
+import time
+#openTele
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 app = FastAPI()
+
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+span_processor = BatchSpanProcessor(ConsoleSpanExporter())
+trace.get_tracer_provider().add_span_processor(span_processor)
 
 app.add_middleware( #liga com o front
     CORSMiddleware,
@@ -12,22 +23,28 @@ app.add_middleware( #liga com o front
     allow_headers=["*"],
 )
 
+FastAPIInstrumentor.instrument_app(app)
+
 def metodosubstringsearch(content, palavra):
     #metodo simples, seguindo o da sala de aula. 
     
     n = len(content)
     m = len(palavra)
 
+    ocorrencias = []
+
     for i in range(0, n - m + 1):
+
         j = 0
-        
-        while (j < m and content[i + j] == palavra[j]):
+
+        while (j < m and content[i + j].lower() == palavra[j].lower()):
             j += 1
-        
+
         if j == m:
-            return i
-        
-    return -1
+
+            ocorrencias.append(i)
+
+    return ocorrencias
 
 @app.post("/search")
 async def search(
@@ -38,11 +55,13 @@ async def search(
 
     texto = ""
 
+    #txt
     if file.filename.endswith(".txt"):
 
         conteudo = await file.read()
         texto = conteudo.decode("utf-8")
 
+    #pdf
     elif file.filename.endswith(".pdf"):
 
         pdf = PyPDF2.PdfReader(file.file)
@@ -52,23 +71,68 @@ async def search(
             if pagina.extract_text():
                 texto += pagina.extract_text()
 
-        if algorithm == "naive":
-            resultado = metodosubstringsearch(texto, keyword)
+    n = len(texto)
+    m = len(keyword)
 
-        elif algorithm == "kmp":
-        
-            elif algorithm == "boyer":
+    if algorithm == "naive":
+        with tracer.start_as_current_span("substring-search"):
 
-    resultado = boyer_moore(texto, keyword)
+                inicio = time.perf_counter()
+        resultado = metodosubstringsearch(texto, keyword)
 
-    if resultado != -1:
+        fim = time.perf_counter()
 
-        trecho = texto[resultado:resultado + 100]
+        tempo_execucao = (fim - inicio) * 1000
+        span = trace.get_current_span()
+
+        span.set_attribute("algorithm", algorithm)
+        span.set_attribute("text_size_n", n)
+        span.set_attribute("pattern_size_m", m)
+        span.set_attribute("occurrences", len(resultado))
+        span.set_attribute("execution_time_ms", tempo_execucao)
+
+    elif algorithm == "kmp":
 
         return {
-            "matches": [trecho]
+            "mensagem": "KMP ainda não implementado"
+        }
+
+    elif algorithm == "boyer":
+
+        return {
+            "mensagem": "Boyer Moore ainda não implementado"
+        }
+
+
+    if len(resultado) > 0:
+
+        trechos = []
+
+        for posicao in resultado:
+
+            inicio = max(0, posicao - 20)
+            fim = min(len(texto), posicao + len(keyword) + 20)
+
+            trecho = texto[inicio:fim]
+
+            trechos.append(trecho)
+
+        return {
+            "found": True,
+            "occurrences": len(resultado),
+            "positions": resultado,
+            "execution_time_ms": tempo_execucao,
+            "text_size_n": n,
+            "pattern_size_m": m,
+            "matches": trechos
         }
 
     return {
+        "found": True,
+        "occurrences": 0,
+        "positions": [],
+        "execution_time_ms": tempo_execucao,
+        "text_size_n": n,
+        "pattern_size_m": m,
         "matches": []
     }
